@@ -1,18 +1,24 @@
 /**
  * AI Chat Assistant — Embed Script
  *
- * Injects a floating chat bubble + iframe widget into any webpage.
+ * Injects a floating character bubble + iframe widget into any webpage.
  * The iframe loads /widget from the same origin as this script,
  * so all API calls are same-origin (no CORS issues).
  *
+ * The launcher is a live SVG character driven by the Emotion Ball /
+ * Mood Mates engine: it blinks, follows the pointer, and switches
+ * expression as the assistant thinks, searches, replies, finishes or fails.
+ *
  * Usage:
- *   <script src="https://your-ai-chat-assistant.edgeone.app/embed.js" async></script>
+ *   <script src="https://chat.example.com/embed.js" async></script>
  *
  * Options (data-* attributes):
- *   data-color    — Accent color (default: #6366f1)
- *   data-position — "bottom-right" (default) or "bottom-left"
+ *   data-character — "twinkle" (default) | "nimbo" | "ball"
+ *   data-position  — "bottom-right" (default) | "bottom-left"
+ *   data-color     — fallback icon color (only used if the engine fails to load)
  */
 (function () {
+  'use strict';
   if (typeof window === 'undefined') return;
   if (window.__aiAssistantLoaded) return;
   window.__aiAssistantLoaded = true;
@@ -33,6 +39,9 @@
 
   var color = (script && script.getAttribute('data-color')) || '#6366f1';
   var position = (script && script.getAttribute('data-position')) || 'bottom-right';
+  var character = (script && script.getAttribute('data-character')) || 'twinkle';
+  if (['nimbo', 'twinkle', 'ball'].indexOf(character) === -1) character = 'nimbo';
+  var isBall = character === 'ball';
   var isLeft = position === 'bottom-left';
   var side = isLeft ? 'left' : 'right';
 
@@ -76,19 +85,44 @@
   // ─── Styles ──────────────────────────────────────────────────────────────
   var css = document.createElement('style');
   css.textContent =
-    '#__aa-bubble{position:fixed;bottom:24px;' + side + ':24px;z-index:2147483647;' +
+    '#__aa-bubble{position:fixed;bottom:18px;' + side + ':18px;z-index:2147483647;' +
     '-webkit-tap-highlight-color:transparent;touch-action:manipulation;' +
-    'width:60px;height:60px;border-radius:50%;' +
+    'width:80px;height:80px;padding:0;border:none;outline:none;background:transparent;' +
+    '-webkit-appearance:none;appearance:none;cursor:pointer;display:block;' +
+    'transition:transform .3s cubic-bezier(.4,0,.2,1),opacity .3s}' +
+    /* 极淡柔光背板：让浅色角色在白底上也能浮起来，深底则像一圈微光 */
+    '#__aa-bubble::before{content:"";position:absolute;inset:4%;border-radius:50%;' +
+    'background:radial-gradient(circle at 50% 45%,rgba(255,255,255,.72),rgba(255,255,255,.18) 62%,rgba(255,255,255,0) 76%);' +
+    'box-shadow:0 4px 18px rgba(40,50,90,.10);pointer-events:none;' +
+    'transition:box-shadow .35s,background .35s}' +
+    /* 球球是白色圆球，白底下会糊掉，单独给背板加一圈浅灰边缘 */
+    '#__aa-bubble[data-engine="eb"]::before{background:radial-gradient(circle at 50% 45%,' +
+    'rgba(255,255,255,.95),rgba(226,232,246,.75) 68%,rgba(198,208,232,.35) 80%);' +
+    'box-shadow:0 4px 18px rgba(40,50,90,.16),inset 0 0 0 1px rgba(120,134,170,.14)}' +
+    '#__aa-bubble:hover{transform:scale(1.09) translateY(-2px)}' +
+    '#__aa-bubble:active{transform:scale(.93)}' +
+    '#__aa-mate{position:absolute;inset:-10%;display:block;pointer-events:none;' +
+    'filter:drop-shadow(0 5px 8px rgba(22,28,54,.22));' +
+    'transition:filter .35s,transform .35s}' +
+    '#__aa-mate svg{display:block;width:100%;height:100%}' +
+    /* 对话状态给一点体感：思考偏蓝、检索偏紫、出错偏红、完成偏金 */
+    '#__aa-bubble[data-state="thinking"] #__aa-mate{filter:drop-shadow(0 0 12px rgba(108,140,240,.65))}' +
+    '#__aa-bubble[data-state="searching"] #__aa-mate{filter:drop-shadow(0 0 12px rgba(158,116,232,.65))}' +
+    '#__aa-bubble[data-state="replying"] #__aa-mate{filter:drop-shadow(0 0 10px rgba(96,178,214,.55))}' +
+    '#__aa-bubble[data-state="done"] #__aa-mate{filter:drop-shadow(0 0 14px rgba(240,186,88,.7))}' +
+    '#__aa-bubble[data-state="error"] #__aa-mate,' +
+    '#__aa-bubble[data-state="refused"] #__aa-mate{filter:drop-shadow(0 0 12px rgba(226,91,91,.6))}' +
+    '#__aa-bubble .aa-fallback-icon{display:block;width:100%;height:100%;' +
+    'padding:19px;box-sizing:border-box;fill:#fff;border-radius:50%;' +
     'background:linear-gradient(135deg,' + color + ',' + color + 'dd);' +
-    'cursor:pointer;border:none;outline:none;' +
-    'box-shadow:0 8px 24px ' + color + '44,0 2px 8px rgba(0,0,0,.1);' +
-    'display:flex;align-items:center;justify-content:center;' +
-    'transition:all .3s cubic-bezier(.4,0,.2,1)}' +
-    '#__aa-bubble:hover{transform:scale(1.1) translateY(-2px);box-shadow:0 12px 32px ' + color + '55,0 4px 12px rgba(0,0,0,.15)}' +
-    '#__aa-bubble:active{transform:scale(.95)}' +
-    '#__aa-bubble svg{width:28px;height:28px;fill:#fff;transition:transform .3s}' +
-    '#__aa-frame{position:fixed;bottom:100px;' + side + ':24px;z-index:2147483646;' +
-    'width:420px;height:640px;max-height:calc(100vh - 120px);max-width:calc(100vw - 48px);' +
+    'box-shadow:0 8px 24px ' + color + '44}' +
+    '#__aa-close-badge{position:absolute;right:-1px;top:-1px;width:20px;height:20px;' +
+    'border-radius:50%;background:#20263a;color:#fff;font:600 15px/19px system-ui,sans-serif;' +
+    'text-align:center;box-shadow:0 2px 7px rgba(0,0,0,.28);' +
+    'opacity:0;transform:scale(.55);transition:opacity .2s,transform .2s;pointer-events:none}' +
+    'body.__aa-open #__aa-close-badge{opacity:1;transform:scale(1)}' +
+    '#__aa-frame{position:fixed;bottom:104px;' + side + ':20px;z-index:2147483646;' +
+    'width:420px;height:640px;max-height:calc(100vh - 120px);max-width:calc(100vw - 40px);' +
     'border:none;border-radius:20px;' +
     'box-shadow:0 24px 64px rgba(0,0,0,.12),0 8px 24px rgba(0,0,0,.08),0 0 0 1px rgba(0,0,0,.04);' +
     'opacity:0;transform:translateY(12px) scale(.97);' +
@@ -98,18 +132,36 @@
     '@media(max-width:480px){#__aa-frame{width:100vw;max-width:100vw;height:100vh;max-height:100vh;' +
     'bottom:0;' + side + ':0;left:0;border-radius:0}' +
     /* 手机端 iframe 全屏时气泡必须留在最上层，否则用户关不掉面板 */
-    'body.__aa-open #__aa-bubble{top:10px;bottom:auto;width:38px;height:38px;opacity:.92}' +
-    'body.__aa-open #__aa-bubble svg{width:20px;height:20px}}';
+    'body.__aa-open #__aa-bubble{top:8px;bottom:auto;width:46px;height:46px;opacity:.97}' +
+    'body.__aa-open #__aa-close-badge{width:18px;height:18px;font-size:14px;line-height:17px}}';
   document.head.appendChild(css);
 
   // ─── Bubble ──────────────────────────────────────────────────────────────
   var bubble = document.createElement('button');
   bubble.id = '__aa-bubble';
-  bubble.setAttribute('aria-label', 'Open chat');
-  var chatIcon = '<svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.2L4 17.2V4h16v12z"/></svg>';
-  var closeIcon = '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
-  bubble.innerHTML = chatIcon;
+  bubble.setAttribute('aria-label', '打开站内问答');
+
+  var mateHost = document.createElement('span');
+  mateHost.id = '__aa-mate';
+  bubble.appendChild(mateHost);
+
+  var badge = document.createElement('span');
+  badge.id = '__aa-close-badge';
+  badge.textContent = '×';
+  bubble.appendChild(badge);
+
   document.body.appendChild(bubble);
+
+  // 引擎加载失败时的降级：保留一个普通聊天气泡图标，绝不白屏
+  var fallbackOn = false;
+  function useFallback() {
+    if (fallbackOn) return;
+    fallbackOn = true;
+    mateHost.style.display = 'none';
+    bubble.insertAdjacentHTML('afterbegin',
+      '<svg class="aa-fallback-icon" viewBox="0 0 24 24">' +
+      '<path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.2L4 17.2V4h16v12z"/></svg>');
+  }
 
   // ─── Iframe ──────────────────────────────────────────────────────────────
   var frame = document.createElement('iframe');
@@ -147,13 +199,129 @@
     }
   }, 1000);
 
+  // ─── Emotion engine ──────────────────────────────────────────────────────
+  // 两套引擎共用 window.EMOTION_SEED / EMOTION_GROUPS，同时加载会互相覆盖，
+  // 所以按 data-character 只加载其中一套。
+  // 源文件由 scripts/build-emotion.js 按依赖顺序合并成单文件，一次请求即可。
+  var LIB = [isBall ? '/emotion/eb.js' : '/emotion/mm.js'];
+
+  var mate = null;
+  var pendingState = 'idle';
+
+  // 对话状态 → 表情编号（00-09 生命周期 / 10-29 情绪 / 30-49 代理状态）
+  var EMOTION = {
+    idle:      '02',  // 待机放空
+    open:      '10',  // 开心
+    thinking:  '30',  // 思考中
+    searching: '40',  // 检索资料
+    replying:  '39',  // 输出回复
+    done:      '33',  // 任务完成（带撒花）
+    error:     '34',  // 出错
+    refused:   '38',  // 拒绝 / 受限
+    close:     '02'
+  };
+
+  var idleTimer = null;
+
+  function setState(state) {
+    pendingState = state;
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+
+    var id = EMOTION[state] || EMOTION.idle;
+    bubble.setAttribute('data-state', state);
+    bubble.setAttribute('data-emotion', id);
+
+    if (!mate) return;
+    try {
+      mate.handleAIMessage({ emotionId: id });
+      if (state === 'done' && typeof mate.burst === 'function') mate.burst(20);
+      if (state === 'open' && typeof mate.bounce === 'function') mate.bounce();
+    } catch (e) {}
+
+    // 一次性状态播完回到待机，避免角色永远定格在「出错」或「撒花」
+    if (state === 'done' || state === 'error' || state === 'refused' || state === 'open') {
+      idleTimer = setTimeout(function () { setState('idle'); }, 2800);
+    }
+  }
+
+  function loadOne(url) {
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = url;
+      s.async = false;
+      s.onload = resolve;
+      s.onerror = function () { reject(new Error('failed to load ' + url)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  (function boot() {
+    var chain = Promise.resolve();
+    LIB.forEach(function (path) {
+      chain = chain.then(function () { return loadOne(origin + path); });
+    });
+    chain.then(function () {
+      var Ctor = isBall ? window.EmotionBall : window.MoodMates;
+      if (!Ctor || typeof Ctor.create !== 'function') throw new Error('engine not available');
+      bubble.setAttribute('data-engine', isBall ? 'eb' : 'mm');
+
+      mate = Ctor.create(mateHost, {
+        character: isBall ? undefined : character,
+        shape: 'blob',
+        emotion: '02',
+        idle: false,           // 状态由对话驱动，不让待机策略抢走表情
+        eyeScale: 1.45,        // 72px 小尺寸下放大眼睛保证可读
+        fallbackId: '02',
+        label: '站内问答助手'
+      });
+
+      setState(pendingState);
+    }).catch(function (err) {
+      console.warn('[AI Assistant] 表情引擎加载失败，回退默认图标：', err && err.message);
+      useFallback();
+    });
+  })();
+
+  // iframe 把 SSE 阶段通过 postMessage 送上来
+  window.addEventListener('message', function (e) {
+    if (e.origin !== origin) return;
+    var d = e.data;
+    if (!d || d.type !== '__aa_emotion') return;
+    setState(d.state);
+  });
+
+  // 鼠标注视：相对气泡中心的归一化方向，全部在本机计算，不发送任何数据
+  document.addEventListener('pointermove', function (e) {
+    if (!mate || typeof mate.setGaze !== 'function') return;
+    var r = bubble.getBoundingClientRect();
+    var nx = (e.clientX - (r.left + r.width / 2)) / (window.innerWidth / 2);
+    var ny = (e.clientY - (r.top + r.height / 2)) / (window.innerHeight / 2);
+    try {
+      mate.setGaze(Math.max(-1, Math.min(1, nx)), Math.max(-1, Math.min(1, ny)));
+    } catch (err) {}
+  }, { passive: true });
+
+  // 标签页切到后台时停帧省电
+  document.addEventListener('visibilitychange', function () {
+    if (!mate || typeof mate.setActive !== 'function') return;
+    try { mate.setActive(!document.hidden); } catch (err) {}
+  });
+
   // ─── Toggle ──────────────────────────────────────────────────────────────
   var isOpen = false;
   bubble.addEventListener('click', function () {
     isOpen = !isOpen;
     frame.classList.toggle('open', isOpen);
     document.body.classList.toggle('__aa-open', isOpen);
-    bubble.innerHTML = isOpen ? closeIcon : chatIcon;
-    if (isOpen) sendContext();
+    bubble.setAttribute('aria-label', isOpen ? '关闭站内问答' : '打开站内问答');
+    if (isOpen) {
+      sendContext();
+      setState('open');
+      if (mate && typeof mate.setActive === 'function') {
+        try { mate.setActive(true); } catch (err) {}
+      }
+    } else {
+      setState('close');
+    }
   });
 })();

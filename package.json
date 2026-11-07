@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "emotion": "node scripts/build-emotion.js",
+    "prebuild": "node scripts/build-emotion.js",
     "build": "next build",
     "deploy": "edgeone makers deploy",
     "start": "next start"

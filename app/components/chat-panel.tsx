@@ -80,6 +80,15 @@ export default function ChatPanel({ mode = 'full' }: { mode?: 'full' | 'widget' 
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
+  // 把对话阶段告诉父页面的悬浮角色，让它切换表情。
+  // widget 直接打开时 parent === self，消息会被自己忽略，无副作用。
+  const emitEmotion = useCallback((state: string) => {
+    if (typeof window === 'undefined' || window.parent === window) return;
+    try {
+      window.parent.postMessage({ type: '__aa_emotion', state }, '*');
+    } catch {}
+  }, []);
+
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -100,6 +109,9 @@ export default function ChatPanel({ mode = 'full' }: { mode?: 'full' | 'widget' 
 
     const controller = new AbortController();
     abortRef.current = controller;
+    let replied = false;
+    let failed = false;
+    emitEmotion('thinking');
 
     try {
       const res = await fetch('/chat', {
@@ -134,12 +146,14 @@ export default function ChatPanel({ mode = 'full' }: { mode?: 'full' | 'widget' 
           try {
             const event = JSON.parse(payload);
             if (event.type === 'text_delta' && event.delta) {
+              if (!replied) { replied = true; emitEmotion('replying'); }
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantId ? { ...m, content: m.content + event.delta } : m,
                 ),
               );
             } else if (event.type === 'tool_call' && event.tool) {
+              emitEmotion('searching');
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantId
@@ -158,6 +172,10 @@ export default function ChatPanel({ mode = 'full' }: { mode?: 'full' | 'widget' 
                 }),
               );
             } else if (event.type === 'error_message') {
+              failed = true;
+              const text = String(event.content || '');
+              const limited = /限额|限流|频繁|稍后|控制|重试|过多|上限/.test(text);
+              emitEmotion(limited ? 'refused' : 'error');
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantId
@@ -171,6 +189,8 @@ export default function ChatPanel({ mode = 'full' }: { mode?: 'full' | 'widget' 
       }
     } catch (err: any) {
       if (err?.name !== 'AbortError') {
+        failed = true;
+        emitEmotion('error');
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
@@ -180,26 +200,29 @@ export default function ChatPanel({ mode = 'full' }: { mode?: 'full' | 'widget' 
         );
       }
     } finally {
+      if (!failed) emitEmotion('done');
       setIsStreaming(false);
       abortRef.current = null;
     }
-  }, [input, isStreaming, conversationId]);
+  }, [input, isStreaming, conversationId, emitEmotion]);
 
   const stopStream = useCallback(() => {
     abortRef.current?.abort();
+    emitEmotion('idle');
     fetch('/stop', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ conversation_id: conversationId }),
     }).catch(() => {});
-  }, [conversationId]);
+  }, [conversationId, emitEmotion]);
 
   const clearChat = useCallback(() => {
     setMessages([]);
+    emitEmotion('idle');
     if (typeof window !== 'undefined') {
       localStorage.removeItem('ai-chat-assistant-cid');
     }
-  }, []);
+  }, [emitEmotion]);
 
   const isWidget = mode === 'widget';
 
