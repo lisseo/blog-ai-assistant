@@ -135,8 +135,22 @@ export async function onRequest(context: any) {
   const conversationId: string = body.conversation_id || context.conversation_id ||
     context.request?.headers?.get?.('makers-conversation-id') || '';
   const model = resolveModelName(ctxEnv);
-  const baseURL = ctxEnv.AI_GATEWAY_BASE_URL || '';
-  const apiKey = ctxEnv.AI_GATEWAY_API_KEY || '';
+  // Makers 官方文档里网关密钥叫 MAKERS_MODELS_KEY，模板/控制台里叫
+  // AI_GATEWAY_API_KEY。edgeone.json 声明了 agents.framework，平台部署时
+  // 会自动注入网关配置，所以控制台里手动加的那一条被删掉也不该让服务失联。
+  // 两个名字都认，Base URL 也给默认值，避免 SDK 回落到 api.openai.com。
+  const baseURL = (ctxEnv.AI_GATEWAY_BASE_URL || 'https://ai-gateway.edgeone.link/v1').replace(/\/+$/, '');
+  const apiKey = ctxEnv.AI_GATEWAY_API_KEY || ctxEnv.MAKERS_MODELS_KEY || '';
+
+  if (!apiKey) {
+    return createSSEResponse(async function* () {
+      yield sseEvent({
+        type: 'error_message',
+        content: '站内助手尚未配置模型网关密钥。请在 Makers 控制台「Models / API Key」创建密钥，并在项目环境变量中补回 AI_GATEWAY_API_KEY。',
+      });
+      yield 'data: [DONE]\n\n';
+    });
+  }
 
   // ─── 公开域防护 ────────────────────────────────────────────────────────
   // 绑定自定义域名后 /chat 对公网无鉴权，模板原版没有频控。
