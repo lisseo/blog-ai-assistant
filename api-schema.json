@@ -1,0 +1,27 @@
+{
+  "tools": [
+    {
+      "name": "search_posts",
+      "description": "读取 blog.liliee.cn 的全站文章索引，返回每篇文章的 id、标题、日期、分类、标签、摘要和完整链接。当用户问「有没有讲 X 的文章」「帮我找某篇」「这个站都写了什么」「列一下文章」时调用。这是静态 JSON 文件，一次返回全部文章，请自己按关键词筛选，不要反复调用。",
+      "endpoint": "GET /ai-index.json",
+      "parameters": {
+        "q": {
+          "type": "string",
+          "description": "用户想找的关键词。仅作提示用，服务端返回全量索引，需要自行筛选。"
+        }
+      }
+    },
+    {
+      "name": "get_post",
+      "description": "按 id 读取某一篇文章的纯文本全文，用于回答具体步骤、命令、配置值等细节。必须先用 search_posts 拿到 id 再调用，不要猜测 id。",
+      "endpoint": "GET /ai/{id}.json",
+      "parameters": {
+        "id": {
+          "type": "string",
+          "description": "文章 id，取自 search_posts 返回结果里的 id 字段，例如 fc6b5872",
+          "required": true
+        }
+      }
+    }
+  ]
+}
