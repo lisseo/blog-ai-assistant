@@ -41,6 +41,48 @@ let _schemaLoadAttempted = false;
 
 const SCHEMA_FILE_NAMES = ['api-schema.json', 'public/api-schema.json'];
 
+/**
+ * 内置兜底 schema。
+ * Makers Agent 运行时的工作目录不一定是项目根，api-schema.json 也不一定
+ * 会随构建产物一起上传（实测线上就出现了 "no API schema found"，
+ * AI 直接告诉访客「没有挂载 search_posts 工具」）。
+ * 因此把本博客的两个检索工具写死在这里：三种外部来源全部失败时仍可用。
+ * 想完全禁用工具，把环境变量 DATA_API_SCHEMA 设成合法但 tools 为空的 JSON。
+ */
+const BUILTIN_SCHEMA: ApiSchema = {
+  tools: [
+    {
+      name: 'search_posts',
+      description: '读取 blog.liliee.cn 的全站文章索引，返回每篇文章的 id、标题、日期、分类、标签、摘要和完整链接。当用户问「有没有讲 X 的文章」「帮我找某篇」「这个站都写了什么」「列一下文章」时调用。这是静态 JSON 文件，一次返回全部文章，请自己按关键词筛选，不要反复调用。',
+      endpoint: 'GET /ai-index.json',
+      parameters: {
+        q: {
+          type: 'string',
+          description: '用户想找的关键词。仅作提示用，服务端返回全量索引，需要自行筛选。',
+        },
+      },
+    },
+    {
+      name: 'get_post',
+      description: '按 id 读取某一篇文章的纯文本全文，用于回答具体步骤、命令、配置值等细节。必须先用 search_posts 拿到 id 再调用，不要猜测 id。',
+      endpoint: 'GET /ai/{id}.json',
+      parameters: {
+        id: {
+          type: 'string',
+          description: '文章 id，取自 search_posts 返回结果里的 id 字段，例如 fc6b5872',
+          required: true,
+        },
+      },
+    },
+  ],
+};
+
+function useBuiltin(reason: string): ApiSchema {
+  logger.log(`[schema] ${reason}，使用内置兜底 schema（${BUILTIN_SCHEMA.tools.length} 个工具）`);
+  _schemaCache = BUILTIN_SCHEMA;
+  return BUILTIN_SCHEMA;
+}
+
 export async function loadApiSchema(env: Record<string, string | undefined>): Promise<ApiSchema | null> {
   if (_schemaLoadAttempted) return _schemaCache;
   _schemaLoadAttempted = true;
@@ -53,7 +95,7 @@ export async function loadApiSchema(env: Record<string, string | undefined>): Pr
       return _schemaCache;
     } catch (e) {
       logger.error('[schema] failed to parse DATA_API_SCHEMA:', (e as Error).message);
-      return null;
+      return useBuiltin('配置读取失败');
     }
   }
 
@@ -67,7 +109,7 @@ export async function loadApiSchema(env: Record<string, string | undefined>): Pr
       return _schemaCache;
     } catch (e) {
       logger.error('[schema] failed to fetch DATA_API_SCHEMA_URL:', (e as Error).message);
-      return null;
+      return useBuiltin('配置读取失败');
     }
   }
 
@@ -84,7 +126,7 @@ export async function loadApiSchema(env: Record<string, string | undefined>): Pr
     }
   }
 
-  return null;
+  return useBuiltin('配置读取失败');
 }
 
 // ─── Execute a tool call by proxying to user's API ───────────────────────────

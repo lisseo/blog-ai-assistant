@@ -266,7 +266,7 @@ export async function onRequest(context: any) {
 
           let result: any;
           if (apiSchema) {
-            result = await callTool(apiSchema, ctxEnv.DATA_API_BASE_URL || '', ctxEnv.DATA_API_KEY, tc.name, input);
+            result = await callTool(apiSchema, ctxEnv.DATA_API_BASE_URL || 'https://blog.liliee.cn', ctxEnv.DATA_API_KEY, tc.name, input);
           } else {
             result = { error: `Unknown tool: ${tc.name}` };
           }
