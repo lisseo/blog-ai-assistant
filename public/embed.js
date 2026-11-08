@@ -87,7 +87,9 @@
     return {
       title: document.title || '',
       url: location.href || '',
-      content: (content || '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 6000)
+      /* 2000 字左右的正文已足够回答「这篇文章讲了什么」；再长的内容交给
+         get_post 按需读取，避免每轮工具调用都重复背着一整页烧 Token */
+      content: (content || '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 2400)
     };
   }
 

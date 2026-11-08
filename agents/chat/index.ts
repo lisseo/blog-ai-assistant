@@ -13,14 +13,18 @@ import { createLogger, sseEvent, createSSEResponse, corsResponse, streamChat } f
 import type { ChatMessage } from '../_shared';
 import { loadApiSchema, callTool } from '../_api-proxy';
 import type { ApiSchema } from '../_api-proxy';
-import { checkOrigin, checkRateLimit, checkMessageLength, clientIp } from '../_ratelimit';
+import { checkOrigin, checkRateLimit, checkMessageLength, clientIp, checkDailyTokenBudget, estimateTokens } from '../_ratelimit';
 import { readFile } from 'fs/promises';
 import { resolve } from 'path';
 
 const logger = createLogger('chat');
 
-const MAX_HISTORY = 20;
-const MAX_TOOL_TURNS = 4;
+/* Token 预算：历史与工具轮次都会在每轮请求里整包重发，8 条 / 3 轮足够
+   覆盖「找文章 → 读全文 → 回答」，再往上就是纯重复计费。 */
+const MAX_HISTORY = 8;
+const MAX_TOOL_TURNS = 3;
+const MAX_PAGE_CONTEXT_CHARS = 2400;
+const MAX_TOOL_RESULT_CHARS = 4000;
 
 // In-process conversation history
 const _history = new Map<string, ChatMessage[]>();
@@ -54,6 +58,7 @@ function buildSystemPrompt(
   config: AssistantConfig,
   env: Record<string, string | undefined>,
   pageContext?: { title?: string; url?: string; content?: string },
+  pageChars: number = MAX_PAGE_CONTEXT_CHARS,
 ): string {
   let prompt = env.SYSTEM_PROMPT || config.systemPrompt ||
     'You are a helpful, friendly AI assistant. Answer questions clearly and concisely. Use Markdown formatting when appropriate.';
@@ -65,7 +70,7 @@ function buildSystemPrompt(
     if (pageContext.title) prompt += `**Title:** ${pageContext.title}\n`;
     if (pageContext.url) prompt += `**URL:** ${pageContext.url}\n`;
     if (pageContext.content) {
-      prompt += `\n**Page Content:**\n${pageContext.content.slice(0, 6000)}\n`;
+      prompt += `\n**Page Content:**\n${pageContext.content.slice(0, pageChars)}\n`;
     }
     prompt += `\n---\nUse the page context above to answer questions about the current page. If the question is unrelated, still answer helpfully.\n`;
   }
@@ -182,6 +187,9 @@ export async function onRequest(context: any) {
   }
 
   const systemPrompt = buildSystemPrompt(config, ctxEnv, pageContext);
+  /* 工具循环第 2 轮起，页面正文已在第 1 轮读过（或由 get_post 结果补上），
+     只留开头一小段作语境锚点，省掉每轮重复背整页的 Token */
+  const systemPromptCompact = buildSystemPrompt(config, ctxEnv, pageContext, 600);
 
   // ─── Conversation history ────────────────────────────────────────────────
   if (!_history.has(conversationId)) {
@@ -204,9 +212,17 @@ export async function onRequest(context: any) {
         turns++;
 
         const messages: ChatMessage[] = [
-          { role: 'system', content: systemPrompt },
+          { role: 'system', content: turns === 1 ? systemPrompt : systemPromptCompact },
           ...history,
         ];
+
+        // 每一轮都按实际送进模型的文本扣日预算，输出预留 1500（= max_tokens）
+        const turnChars = messages.reduce((n, m) => n + String(m.content || '').length, 0) + 900;
+        const budgetError = checkDailyTokenBudget(estimateTokens(turnChars) + 1500, ctxEnv);
+        if (budgetError) {
+          yield sseEvent({ type: 'error_message', content: budgetError });
+          break;
+        }
 
         let assistantText = '';
         let toolCalls: Array<{ id: string; name: string; arguments: string }> = [];
@@ -289,9 +305,12 @@ export async function onRequest(context: any) {
 
           yield sseEvent({ type: 'tool_result', tool: tc.name, result });
 
+          const rawResult = JSON.stringify(result);
           history.push({
             role: 'tool',
-            content: JSON.stringify(result),
+            content: rawResult.length > MAX_TOOL_RESULT_CHARS
+              ? rawResult.slice(0, MAX_TOOL_RESULT_CHARS) + ' …(结果已截断)'
+              : rawResult,
             tool_call_id: tc.id,
           });
           while (history.length > MAX_HISTORY) history.shift();

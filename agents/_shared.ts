@@ -100,7 +100,9 @@ export async function* streamChat(
     model,
     messages,
     stream: true,
-    max_tokens: 8192,
+    /* 站内问答是短回答场景，1500 token 足够列文章和贴命令；
+       不设上限时模型偶尔会长篇展开，输出 token 全算进赠送额度 */
+    max_tokens: 1500,
   };
   if (tools && tools.length > 0) {
     body.tools = tools;

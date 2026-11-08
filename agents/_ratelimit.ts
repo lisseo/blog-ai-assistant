@@ -18,6 +18,7 @@ const WINDOW_MS = 60_000;
 const ipHits = new Map<string, number[]>();
 const conversationHits = new Map<string, number[]>();
 let dayCounter = { day: '', count: 0 };
+let dayTokens = { day: '', used: 0 };
 
 type Env = Record<string, string | undefined>;
 
@@ -96,7 +97,7 @@ export function checkRateLimit(
 
   const perIp = num(env, 'RATE_PER_MINUTE_IP', 12);
   const perConv = num(env, 'RATE_PER_MINUTE_CONV', 20);
-  const perDay = num(env, 'RATE_PER_DAY', 500);
+  const perDay = num(env, 'RATE_PER_DAY', 200);
 
   const ipKey = ip || `conv:${conversationId || 'anonymous'}`;
   if (!hit(ipHits, ipKey, now, perIp)) {
@@ -119,4 +120,28 @@ export function checkRateLimit(
 export function checkMessageLength(message: string, env: Env): string | null {
   const max = num(env, 'MAX_MESSAGE_CHARS', 2000);
   return message.length > max ? `单次提问请控制在 ${max} 字以内。` : null;
+}
+
+/**
+ * 赠送 Token 是账号级、所有项目共享的，一次脚本重试或被人刷接口就能把
+ * 整月 50 万打光。这里按「本轮实际送进模型的字符数」粗估并扣日预算，
+ * 默认 30,000 token/天（约等于 50 万 ÷ 30 天的 1.8 倍，留高峰余量）。
+ * 中文约 1.3 字符/token，英文约 4 字符/token，取偏保守的换算。
+ * 环境变量 DAILY_TOKEN_BUDGET 可调，设一个极大值等于关闭这道闸门。
+ */
+export function estimateTokens(chars: number): number {
+  return Math.max(1, Math.ceil(chars / 1.3));
+}
+
+export function checkDailyTokenBudget(incoming: number, env: Env): string | null {
+  const budget = num(env, 'DAILY_TOKEN_BUDGET', 30_000);
+  const now = Date.now();
+  const day = new Date(now).toISOString().slice(0, 10);
+  if (dayTokens.day !== day) dayTokens = { day, used: 0 };
+
+  if (dayTokens.used + incoming > budget) {
+    return '今日问答额度已用完，请明天再来。';
+  }
+  dayTokens.used += incoming;
+  return null;
 }
