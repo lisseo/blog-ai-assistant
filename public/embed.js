@@ -46,7 +46,7 @@
   var widgetOrigin = (script && script.getAttribute('data-widget-origin')) || scriptOrigin;
   try { widgetOrigin = new URL(widgetOrigin, location.href).origin; } catch (e) {}
 
-  var color = (script && script.getAttribute('data-color')) || '#6366f1';
+  var color = (script && script.getAttribute('data-color')) || '#425aef';
   var position = (script && script.getAttribute('data-position')) || 'bottom-right';
   var character = (script && script.getAttribute('data-character')) || 'twinkle';
   if (['nimbo', 'twinkle', 'ball'].indexOf(character) === -1) character = 'nimbo';
@@ -94,55 +94,58 @@
   // ─── Styles ──────────────────────────────────────────────────────────────
   var css = document.createElement('style');
   css.textContent =
-    '#__aa-bubble{position:fixed;bottom:18px;' + side + ':18px;z-index:2147483647;' +
+    /* 尺寸对齐 anzhiyu 的卡片节奏：桌面 68px、手机 54px，角色不再向外溢出 */
+    '#__aa-bubble{position:fixed;bottom:16px;' + side + ':16px;z-index:2147483647;' +
     '-webkit-tap-highlight-color:transparent;touch-action:manipulation;' +
-    'width:80px;height:80px;padding:0;border:none;outline:none;background:transparent;' +
+    'width:68px;height:68px;padding:0;border:none;outline:none;background:transparent;' +
     '-webkit-appearance:none;appearance:none;cursor:pointer;display:block;' +
     'transition:transform .3s cubic-bezier(.4,0,.2,1),opacity .3s}' +
-    /* 极淡柔光背板：让浅色角色在白底上也能浮起来，深底则像一圈微光 */
-    '#__aa-bubble::before{content:"";position:absolute;inset:4%;border-radius:50%;' +
-    'background:radial-gradient(circle at 50% 45%,rgba(255,255,255,.72),rgba(255,255,255,.18) 62%,rgba(255,255,255,0) 76%);' +
-    'box-shadow:0 4px 18px rgba(40,50,90,.10);pointer-events:none;' +
+    /* 淡蓝紫柔光代替原来的纯白圆饼，跟 #425aef 主色呼应 */
+    '#__aa-bubble::before{content:"";position:absolute;inset:2%;border-radius:50%;' +
+    'background:radial-gradient(circle at 50% 45%,rgba(255,255,255,.55),rgba(66,90,239,.07) 62%,rgba(66,90,239,0) 78%);' +
+    'box-shadow:0 4px 14px rgba(44,45,48,.10);pointer-events:none;' +
     'transition:box-shadow .35s,background .35s}' +
-    /* 球球是白色圆球，白底下会糊掉，单独给背板加一圈浅灰边缘 */
     '#__aa-bubble[data-engine="eb"]::before{background:radial-gradient(circle at 50% 45%,' +
-    'rgba(255,255,255,.95),rgba(226,232,246,.75) 68%,rgba(198,208,232,.35) 80%);' +
-    'box-shadow:0 4px 18px rgba(40,50,90,.16),inset 0 0 0 1px rgba(120,134,170,.14)}' +
-    '#__aa-bubble:hover{transform:scale(1.09) translateY(-2px)}' +
+    'rgba(255,255,255,.95),rgba(226,232,246,.7) 68%,rgba(198,208,232,.3) 80%);' +
+    'box-shadow:0 4px 14px rgba(44,45,48,.16),inset 0 0 0 1px rgba(120,134,170,.14)}' +
+    '#__aa-bubble:hover{transform:scale(1.08) translateY(-2px)}' +
     '#__aa-bubble:active{transform:scale(.93)}' +
-    '#__aa-mate{position:absolute;inset:-10%;display:block;pointer-events:none;' +
-    'filter:drop-shadow(0 5px 8px rgba(22,28,54,.22));' +
+    '#__aa-mate{position:absolute;inset:-2%;display:block;pointer-events:none;' +
+    'filter:drop-shadow(0 4px 7px rgba(22,28,54,.18));' +
     'transition:filter .35s,transform .35s}' +
     '#__aa-mate svg{display:block;width:100%;height:100%}' +
-    /* 对话状态给一点体感：思考偏蓝、检索偏紫、出错偏红、完成偏金 */
-    '#__aa-bubble[data-state="thinking"] #__aa-mate{filter:drop-shadow(0 0 12px rgba(108,140,240,.65))}' +
-    '#__aa-bubble[data-state="searching"] #__aa-mate{filter:drop-shadow(0 0 12px rgba(158,116,232,.65))}' +
-    '#__aa-bubble[data-state="replying"] #__aa-mate{filter:drop-shadow(0 0 10px rgba(96,178,214,.55))}' +
-    '#__aa-bubble[data-state="done"] #__aa-mate{filter:drop-shadow(0 0 14px rgba(240,186,88,.7))}' +
+    '#__aa-bubble[data-state="thinking"] #__aa-mate{filter:drop-shadow(0 0 12px rgba(66,90,239,.65))}' +
+    '#__aa-bubble[data-state="searching"] #__aa-mate{filter:drop-shadow(0 0 12px rgba(124,116,255,.65))}' +
+    '#__aa-bubble[data-state="replying"] #__aa-mate{filter:drop-shadow(0 0 10px rgba(32,184,255,.55))}' +
+    '#__aa-bubble[data-state="done"] #__aa-mate{filter:drop-shadow(0 0 14px rgba(242,185,75,.7))}' +
     '#__aa-bubble[data-state="error"] #__aa-mate,' +
     '#__aa-bubble[data-state="refused"] #__aa-mate{filter:drop-shadow(0 0 12px rgba(226,91,91,.6))}' +
     '#__aa-bubble .aa-fallback-icon{display:block;width:100%;height:100%;' +
-    'padding:19px;box-sizing:border-box;fill:#fff;border-radius:50%;' +
-    'background:linear-gradient(135deg,' + color + ',' + color + 'dd);' +
-    'box-shadow:0 8px 24px ' + color + '44}' +
-    '#__aa-close-badge{position:absolute;right:-1px;top:-1px;width:20px;height:20px;' +
-    'border-radius:50%;background:#20263a;color:#fff;font:600 15px/19px system-ui,sans-serif;' +
-    'text-align:center;box-shadow:0 2px 7px rgba(0,0,0,.28);' +
+    'padding:17px;box-sizing:border-box;fill:#fff;border-radius:50%;' +
+    'background:' + color + ';box-shadow:0 6px 18px rgba(66,90,239,.28)}' +
+    '#__aa-close-badge{position:absolute;right:-1px;top:-1px;width:18px;height:18px;' +
+    'border-radius:50%;background:#425aef;color:#fff;font:600 14px/17px system-ui,sans-serif;' +
+    'text-align:center;box-shadow:0 2px 6px rgba(0,0,0,.22);' +
     'opacity:0;transform:scale(.55);transition:opacity .2s,transform .2s;pointer-events:none}' +
     'body.__aa-open #__aa-close-badge{opacity:1;transform:scale(1)}' +
-    '#__aa-frame{position:fixed;bottom:104px;' + side + ':20px;z-index:2147483646;' +
-    'width:420px;height:640px;max-height:calc(100vh - 120px);max-width:calc(100vw - 40px);' +
-    'border:none;border-radius:20px;' +
-    'box-shadow:0 24px 64px rgba(0,0,0,.12),0 8px 24px rgba(0,0,0,.08),0 0 0 1px rgba(0,0,0,.04);' +
-    'opacity:0;transform:translateY(12px) scale(.97);' +
-    'transition:opacity .3s cubic-bezier(.4,0,.2,1),transform .3s cubic-bezier(.4,0,.2,1);' +
-    'pointer-events:none;background:#fff;overflow:hidden}' +
-    '#__aa-frame.open{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}' +
-    '@media(max-width:480px){#__aa-frame{width:100vw;max-width:100vw;height:100vh;max-height:100vh;' +
+    /* 面板：12px 圆角 + 主题同款极淡阴影；关闭后 visibility 延迟变 hidden，
+       让全屏 iframe 彻底退出命中测试，iOS 上不会继续吞掉父页的 touch。 */
+    '#__aa-frame{position:fixed;bottom:92px;' + side + ':18px;z-index:2147483646;' +
+    'width:400px;height:600px;max-height:calc(100vh - 110px);max-width:calc(100vw - 36px);' +
+    'border:none;border-radius:12px;' +
+    'box-shadow:0 8px 16px -4px rgba(44,45,48,.047),0 18px 48px rgba(44,45,48,.12);' +
+    'opacity:0;visibility:hidden;transform:translateY(12px) scale(.97);' +
+    'transition:opacity .28s cubic-bezier(.4,0,.2,1),transform .28s cubic-bezier(.4,0,.2,1),visibility 0s .28s;' +
+    'pointer-events:none;background:#f7f9fe;overflow:hidden}' +
+    '#__aa-frame.open{opacity:1;visibility:visible;transform:translateY(0) scale(1);pointer-events:auto;' +
+    'transition:opacity .28s cubic-bezier(.4,0,.2,1),transform .28s cubic-bezier(.4,0,.2,1),visibility 0s 0s}' +
+    '@media(max-width:480px){' +
+    '#__aa-bubble{width:54px;height:54px;bottom:12px;' + side + ':12px}' +
+    '#__aa-frame{width:100vw;max-width:100vw;height:100vh;max-height:100vh;' +
     'bottom:0;' + side + ':0;left:0;border-radius:0}' +
     /* 手机端 iframe 全屏时气泡必须留在最上层，否则用户关不掉面板 */
-    'body.__aa-open #__aa-bubble{top:8px;bottom:auto;width:46px;height:46px;opacity:.97}' +
-    'body.__aa-open #__aa-close-badge{width:18px;height:18px;font-size:14px;line-height:17px}}';
+    'body.__aa-open #__aa-bubble{top:8px;bottom:auto;width:38px;height:38px;opacity:.97}' +
+    'body.__aa-open #__aa-close-badge{width:16px;height:16px;font-size:13px;line-height:15px}}';
   document.head.appendChild(css);
 
   // ─── Bubble ──────────────────────────────────────────────────────────────
@@ -190,14 +193,48 @@
     contextSent = true;
   }
 
+  // 把博客当前主题（明暗 + 主色 + 底色）同步进 iframe，让聊天面板换上同一套皮。
+  // 只在浏览器本地通过 postMessage 传递，不产生任何网络请求。
+  function readTheme() {
+    var root = document.documentElement;
+    var cs = getComputedStyle(root);
+    var pick = function (name, fallback) {
+      return (cs.getPropertyValue(name) || '').trim() || fallback;
+    };
+    return {
+      mode: root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light',
+      primary: pick('--anzhiyu-theme', '#425aef'),
+      bg: pick('--global-bg', '#f7f9fe'),
+      surface: pick('--card-bg', '#ffffff'),
+      text: pick('--font-color', '#4c4948')
+    };
+  }
+
+  function sendTheme() {
+    if (!frame.contentWindow) return;
+    frame.contentWindow.postMessage({
+      type: '__aa_theme',
+      payload: readTheme()
+    }, widgetOrigin);
+  }
+
   frame.addEventListener('load', function () {
     if (!contextSent) sendContext();
+    sendTheme();
   });
 
   // anzhiyu 开了 pjax：站内换页只替换正文，本脚本不会重新执行，必须重发上下文
   document.addEventListener('pjax:complete', function () {
-    setTimeout(sendContext, 150);
+    setTimeout(function () { sendContext(); sendTheme(); }, 150);
   });
+
+  // 主题切换改的是 <html data-theme>，用 MutationObserver 跟上，暗色模式即时换肤
+  if (typeof MutationObserver !== 'undefined') {
+    new MutationObserver(sendTheme).observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme', 'class']
+    });
+  }
 
   // SPA / 其它路由方式的兜底
   var lastUrl = location.href;
@@ -279,7 +316,7 @@
         shape: 'blob',
         emotion: '02',
         idle: false,           // 状态由对话驱动，不让待机策略抢走表情
-        eyeScale: 1.45,        // 72px 小尺寸下放大眼睛保证可读
+        eyeScale: 1.5,         // 手机端 54px 下放大眼睛保证可读
         fallbackId: '02',
         label: '站内问答助手'
       });
@@ -325,11 +362,30 @@
     bubble.setAttribute('aria-label', isOpen ? '关闭站内问答' : '打开站内问答');
     if (isOpen) {
       sendContext();
+      sendTheme();
       setState('open');
       if (mate && typeof mate.setActive === 'function') {
         try { mate.setActive(true); } catch (err) {}
       }
     } else {
+      // 手机端关键：提问时焦点留在 iframe 的 textarea 上，直接隐藏面板
+      // 会让 iOS 虚拟键盘不收起、父页滚动被锁死。先让 iframe 内部失焦。
+      try {
+        frame.contentWindow.postMessage({ type: '__aa_blur' }, widgetOrigin);
+        frame.blur();
+      } catch (err) {}
+
+      // 防御性复位：任何浮层逻辑留下的滚动锁都在这里清掉，
+      // 保证关闭后父页一定能滚。只清理 hidden/fixed，不影响主题自身样式。
+      var b = document.body, h = document.documentElement;
+      if (b.style.overflow === 'hidden' || b.style.position === 'fixed') {
+        b.style.overflow = '';
+        b.style.position = '';
+        b.style.top = '';
+        b.style.width = '';
+      }
+      if (h.style.overflow === 'hidden') h.style.overflow = '';
+
       setState('close');
     }
   });
