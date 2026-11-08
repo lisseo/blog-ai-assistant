@@ -9,13 +9,18 @@
  * Mood Mates engine: it blinks, follows the pointer, and switches
  * expression as the assistant thinks, searches, replies, finishes or fails.
  *
- * Usage:
+ * Usage (hosted on the assistant domain):
  *   <script src="https://chat.example.com/embed.js" async></script>
  *
+ * Usage (script + emotion engine hosted on the blog, widget on the assistant domain):
+ *   <script src="/ai-assistant/embed.js"
+ *           data-widget-origin="https://chat.example.com" async></script>
+ *
  * Options (data-* attributes):
- *   data-character — "twinkle" (default) | "nimbo" | "ball"
- *   data-position  — "bottom-right" (default) | "bottom-left"
- *   data-color     — fallback icon color (only used if the engine fails to load)
+ *   data-character     — "twinkle" (default) | "nimbo" | "ball"
+ *   data-position      — "bottom-right" (default) | "bottom-left"
+ *   data-color         — fallback icon color (only used if the engine fails to load)
+ *   data-widget-origin — origin of /widget and the SSE panel (defaults to script origin)
  */
 (function () {
   'use strict';
@@ -31,11 +36,15 @@
     return null;
   })();
 
-  var origin = '';
+  // 脚本与表情引擎同源；iframe / postMessage 可以单独指到别的域名。
+  var scriptOrigin = '';
   if (script && script.src) {
-    try { origin = new URL(script.src).origin; } catch (e) {}
+    try { scriptOrigin = new URL(script.src).origin; } catch (e) {}
   }
-  if (!origin) return;
+  if (!scriptOrigin) return;
+
+  var widgetOrigin = (script && script.getAttribute('data-widget-origin')) || scriptOrigin;
+  try { widgetOrigin = new URL(widgetOrigin, location.href).origin; } catch (e) {}
 
   var color = (script && script.getAttribute('data-color')) || '#6366f1';
   var position = (script && script.getAttribute('data-position')) || 'bottom-right';
@@ -166,7 +175,7 @@
   // ─── Iframe ──────────────────────────────────────────────────────────────
   var frame = document.createElement('iframe');
   frame.id = '__aa-frame';
-  frame.src = origin + '/widget';
+  frame.src = widgetOrigin + '/widget';
   frame.setAttribute('allow', 'clipboard-write');
   document.body.appendChild(frame);
 
@@ -177,7 +186,7 @@
     frame.contentWindow.postMessage({
       type: '__aa_page_context',
       payload: getPageContext()
-    }, origin);
+    }, widgetOrigin);
     contextSent = true;
   }
 
@@ -258,7 +267,7 @@
   (function boot() {
     var chain = Promise.resolve();
     LIB.forEach(function (path) {
-      chain = chain.then(function () { return loadOne(origin + path); });
+      chain = chain.then(function () { return loadOne(scriptOrigin + path); });
     });
     chain.then(function () {
       var Ctor = isBall ? window.EmotionBall : window.MoodMates;
@@ -284,7 +293,7 @@
 
   // iframe 把 SSE 阶段通过 postMessage 送上来
   window.addEventListener('message', function (e) {
-    if (e.origin !== origin) return;
+    if (e.origin !== widgetOrigin) return;
     var d = e.data;
     if (!d || d.type !== '__aa_emotion') return;
     setState(d.state);
