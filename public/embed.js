@@ -73,7 +73,7 @@
       var noise = clone.querySelectorAll(
         'script, style, noscript, iframe, nav, button, ' +
         '.post-copyright, .post-reward, .relatedPosts, .post-tools, ' +
-        '.ai-btn-group, .ai-btn-item, .tag_share, .post-share, ' +
+        '.tag_share, .post-share, ' +
         '#qrcode, .qr-code, .pagination, .ads-wrap'
       );
       for (var i = 0; i < noise.length; i++) {
